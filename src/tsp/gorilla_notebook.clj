@@ -76,21 +76,31 @@
 ;;; ### Representing Tours
 ;;; A tour starts in one city, and then visits each of the other cities in order, before returning to the start city. A natural representation of a tour is a sequence of cities. For example [1 2 3] could represent a tour that starts in city 1, moves to 2, then 3, and finally returns to 1.
 ;;;
-;;; **Note**: I considered using (1, 2, 3, 1) as the representation of this tour. I also considered an ordered list of edges between cities: ((1, 2), (2, 3), (3, 1)). In the end, I decided (1, 2, 3) was simplest.
+;;; **Note**: Peter explains that he considered using [1 2 3 1] as the representation of this tour, as well as an ordered list of edges between cities: [[1 2] [2 3] [3 1]], but decided that [1 2 3] was simplest.
 ;; **
 ;; @@
 (defn alltours
   "Generate all possible tours."
   [cities]
   (combo/permutations cities))
+;; @@
 
-(defn distance
-  "Distance between two cities given as a city pair."
-  [[a b]]
-  (let [x-dist (- (:x a) (:x b))
-        y-dist (- (:y a) (:y b))]
-    (math/sqrt (+ (math/expt x-dist 2)
-                  (math/expt y-dist 2)))))
+;; **
+;;; For *n* cities there are *n*! permutations. Here are all 3! = 6 tours of 3 cities:
+;; **
+
+;; @@
+(let [cities [1 2 3]]
+  (alltours cities))
+;; @@
+
+;; **
+;;; The length of a tour is the sum of the lengths of each segment in the tour; in other words, the sum of the distances between consecutive cities in the tour, including from the last city back to the first.
+;; **
+
+;; @@
+(declare tour-length
+         distance)
 
 (defn tour-length
   "Sum of distances between each pair of consecutive cities in the tour."
@@ -98,6 +108,16 @@
   (let [dests (concat (drop 1 tour) [(first tour)])
         city-pairs (map vector tour dests)]
     (apply + (map distance city-pairs))))
+;; @@
+
+;; @@
+(defn distance
+  "Distance between two cities given as a city pair."
+  [[a b]]
+  (let [x-dist (- (:x a) (:x b))
+        y-dist (- (:y a) (:y b))]
+    (math/sqrt (+ (math/expt x-dist 2)
+                  (math/expt y-dist 2)))))
 ;; @@
 ;; =>
 ;;; {"type":"html","content":"<span class='clj-var'>#&#x27;tsp.core/alltours-tsp</span>","value":"#'tsp.core/alltours-tsp"}
