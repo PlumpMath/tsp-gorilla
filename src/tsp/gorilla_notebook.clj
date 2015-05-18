@@ -10,23 +10,23 @@
 ;;; In this notebook we will develop some solutions to the problem, and more generally show *how to think about solving a problem* like this.
 ;;;
 ;;;
-;;; <a href="url"><img src="http://www.math.uwaterloo.ca/tsp/history/img/dantzig_big.jpg" align="left" height="300"></a>
+;;; <a href="url"><img src="http://www.math.uwaterloo.ca/tsp/history/img/dantzig_big.jpg" align="left" height="270"></a>
 ;;;
 ;;; <br>(An example tour.)
 ;; **
 
 ;; **
-;;; ##Understanding What We're Talking About (Vocabulary)
+;;; ###Understanding What We're Talking About (Vocabulary)
 ;;; Do we understand precisely what the problem is asking? Do we understand all the concepts that the problem talks about?  Do we understand them well enough to implement them in a programming language? Let's take a first pass:
 ;;;
-;;; - **A set of cities**: We will need to represent a set of cities; Clojure's built in `vector` datatype is immutable and appropriate for this.
+;;; - **A set of cities**: We will need to represent a set of cities; Clojure's built in `vector` datatype is appropriate.
 ;;; - **Distance between each pair of cities**: If `a` and `b` are cities, this could be a function, `(distance [a b])`.  The resulting distance will be a real number.
 ;;; - **City**: All we have to know about an individual city is how far it is from other cities. We don't have to know its name, population, best restaurants, or anything else. So a city could be pair of (x, y) coordinates, if we are using straight-line distance on a plane.
 ;;; - **Tour**: A tour is a specified order in which to visit the cities; again, Clojure's `vector` can represent this simply. For example, given the set of cities `[a b c d]`, a tour might be the list `[b d a c]`, which means to travel from `b` to `d` to `a` to `c` and finally back to `b`.
 ;;; - **Shortest possible tour**: The shortest tour is the one whose tour length is the minimum of all tours.
 ;;; - **Tour length**: The sum of the distances between adjacent cities in the tour (including the last city to the first city). Probably  a function, `(tour-length tour)`.
 ;;; - **What is ...**: We can define a function to answer the question *what is the shortest possible tour?*  The function takes a set of cities as input and returns a tour as output. I will use the convention that any such function will have a name ending in the letters "`tsp`", the traditional abbreviation for Traveling Salesperson Problem.
-;;; 
+;;;
 ;;; At this stage I have a rough sketch of how to attack the problem.  I don't have all the answers, and I haven't committed to specific representations for all the concepts, but I know what all the pieces are, and I don't see anything that stops me from proceeding."
 
 ;; **
@@ -46,22 +46,38 @@
 ;; <=
 
 ;; **
-;;; ## All Tours Algorithm `alltours-tsp`
+;;; ### All Tours Algorithm `alltours-tsp`
 ;;; Let's start with a guaranteed correct (but inefficient) algorithm.
 ;;; > _All Tours Algorithm_: Generate all possible tours of the cities, and choose the shortest tour.
+;;;
+;;; In general our design philosophy is to first write an English description of the algorithm, then write Clojure code that closely mirrors the English description. This will probably require some auxilliary functions and data structures; just assume they exist; devlare them in a forward declaration, and eventually define them with the same design philosophy.
+;;;
+;;; Here is the start of the implementation. We declare the functions we can see we will need in the future, and we can refer to them in higher level functions without defining them ahead of time.
 ;; **
 
 ;; @@
-(defrecord City [x y])
+(declare alltours-tsp
+         alltours      ; Declared because alltours-tsp refers to it
+         shortest-tour
+         tour-length)  ; Same as above--we will implement them later
 
-(defn gen-cities [n & {:keys [w h s] :or {w 900 h 600 s 42}}]
-  (for [i (range n)]
-    (City. (rand-int w) (rand-int h))))
+(defn alltours-tsp
+  "Generate all possible tours of the cities and choose shortest tour."
+  [cities]
+  (shortest-tour (alltours cities)))
+
+(defn shortest-tour
+  "Choose tour with minimum tour length."
+  [tours]
+  (first (sort-by tour-length tours)))
 ;; @@
-;; =>
-;;; {"type":"html","content":"<span class='clj-var'>#&#x27;tsp.core/gen-cities</span>","value":"#'tsp.core/gen-cities"}
-;; <=
 
+;; **
+;;; ### Representing Tours
+;;; A tour starts in one city, and then visits each of the other cities in order, before returning to the start city. A natural representation of a tour is a sequence of cities. For example [1 2 3] could represent a tour that starts in city 1, moves to 2, then 3, and finally returns to 1.
+;;;
+;;; **Note**: I considered using (1, 2, 3, 1) as the representation of this tour. I also considered an ordered list of edges between cities: ((1, 2), (2, 3), (3, 1)). In the end, I decided (1, 2, 3) was simplest.
+;; **
 ;; @@
 (defn alltours
   "Generate all possible tours."
@@ -82,19 +98,20 @@
   (let [dests (concat (drop 1 tour) [(first tour)])
         city-pairs (map vector tour dests)]
     (apply + (map distance city-pairs))))
-
-(defn shortest-tour
-  "Choose tour with minimum tour length."
-  [tours]
-  (first (sort-by tour-length tours)))
-
-(defn alltours-tsp
-  "Generate all possible tours of the cities and choose shortest tour."
-  [cities]
-  (shortest-tour (alltours cities)))
 ;; @@
 ;; =>
 ;;; {"type":"html","content":"<span class='clj-var'>#&#x27;tsp.core/alltours-tsp</span>","value":"#'tsp.core/alltours-tsp"}
+;; <=
+
+;; @@
+(defrecord City [x y])
+
+(defn gen-cities [n & {:keys [w h s] :or {w 900 h 600 s 42}}]
+  (for [i (range n)]
+    (City. (rand-int w) (rand-int h))))
+;; @@
+;; =>
+;;; {"type":"html","content":"<span class='clj-var'>#&#x27;tsp.core/gen-cities</span>","value":"#'tsp.core/gen-cities"}
 ;; <=
 
 ;; @@
@@ -162,14 +179,14 @@
 ;; ->
 ;;; &quot;Elapsed time: 113.42818 msecs&quot;
 ;;; 6 city tour with length 1599.608460755042 for tsp.core$all_tours_tsp@55ec4168
-;;; 
+;;;
 ;; <-
 ;; =>
 ;;; {"type":"list-like","open":"<span class='clj-vector'>[</span>","close":"<span class='clj-vector'>]</span>","separator":" ","items":[{"type":"vega","content":{"width":400,"height":247.2187957763672,"padding":{"bottom":20,"top":10,"right":10,"left":50},"scales":[{"name":"x","type":"linear","range":"width","zero":false,"domain":{"data":"c95a83bb-c179-4bef-8c9c-df0972944017","field":"data.x"}},{"name":"y","type":"linear","range":"height","nice":true,"zero":false,"domain":{"data":"c95a83bb-c179-4bef-8c9c-df0972944017","field":"data.y"}}],"axes":[{"scale":"x","type":"x"},{"scale":"y","type":"y"}],"data":[{"name":"c95a83bb-c179-4bef-8c9c-df0972944017","values":[{"x":253,"y":538},{"x":415,"y":353},{"x":614,"y":144},{"x":467,"y":14},{"x":452,"y":20},{"x":61,"y":137},{"x":253,"y":538}]},{"name":"70b05175-3194-4778-9842-e8a6bec7d869","values":[{"x":253,"y":538},{"x":415,"y":353},{"x":614,"y":144},{"x":467,"y":14},{"x":452,"y":20},{"x":61,"y":137},{"x":253,"y":538}]}],"marks":[{"type":"line","from":{"data":"c95a83bb-c179-4bef-8c9c-df0972944017"},"properties":{"enter":{"x":{"scale":"x","field":"data.x"},"y":{"scale":"y","field":"data.y"},"stroke":{"value":"#FF29D2"},"strokeWidth":{"value":2},"strokeOpacity":{"value":1}}}},{"type":"symbol","from":{"data":"70b05175-3194-4778-9842-e8a6bec7d869"},"properties":{"enter":{"x":{"scale":"x","field":"data.x"},"y":{"scale":"y","field":"data.y"},"fill":{"value":"steelblue"},"fillOpacity":{"value":1}},"update":{"shape":"circle","size":{"value":70},"stroke":{"value":"transparent"}},"hover":{"size":{"value":210},"stroke":{"value":"white"}}}}]},"value":"#gorilla_repl.vega.VegaView{:content {:width 400, :height 247.2188, :padding {:bottom 20, :top 10, :right 10, :left 50}, :scales [{:name \"x\", :type \"linear\", :range \"width\", :zero false, :domain {:data \"c95a83bb-c179-4bef-8c9c-df0972944017\", :field \"data.x\"}} {:name \"y\", :type \"linear\", :range \"height\", :nice true, :zero false, :domain {:data \"c95a83bb-c179-4bef-8c9c-df0972944017\", :field \"data.y\"}}], :axes [{:scale \"x\", :type \"x\"} {:scale \"y\", :type \"y\"}], :data ({:name \"c95a83bb-c179-4bef-8c9c-df0972944017\", :values ({:x 253, :y 538} {:x 415, :y 353} {:x 614, :y 144} {:x 467, :y 14} {:x 452, :y 20} {:x 61, :y 137} {:x 253, :y 538})} {:name \"70b05175-3194-4778-9842-e8a6bec7d869\", :values ({:x 253, :y 538} {:x 415, :y 353} {:x 614, :y 144} {:x 467, :y 14} {:x 452, :y 20} {:x 61, :y 137} {:x 253, :y 538})}), :marks ({:type \"line\", :from {:data \"c95a83bb-c179-4bef-8c9c-df0972944017\"}, :properties {:enter {:x {:scale \"x\", :field \"data.x\"}, :y {:scale \"y\", :field \"data.y\"}, :stroke {:value \"#FF29D2\"}, :strokeWidth {:value 2}, :strokeOpacity {:value 1}}}} {:type \"symbol\", :from {:data \"70b05175-3194-4778-9842-e8a6bec7d869\"}, :properties {:enter {:x {:scale \"x\", :field \"data.x\"}, :y {:scale \"y\", :field \"data.y\"}, :fill {:value \"steelblue\"}, :fillOpacity {:value 1}}, :update {:shape \"circle\", :size {:value 70}, :stroke {:value \"transparent\"}}, :hover {:size {:value 210}, :stroke {:value \"white\"}}}})}}"},{"type":"html","content":"<span class='clj-nil'>nil</span>","value":"nil"}],"value":"[#gorilla_repl.vega.VegaView{:content {:width 400, :height 247.2188, :padding {:bottom 20, :top 10, :right 10, :left 50}, :scales [{:name \"x\", :type \"linear\", :range \"width\", :zero false, :domain {:data \"c95a83bb-c179-4bef-8c9c-df0972944017\", :field \"data.x\"}} {:name \"y\", :type \"linear\", :range \"height\", :nice true, :zero false, :domain {:data \"c95a83bb-c179-4bef-8c9c-df0972944017\", :field \"data.y\"}}], :axes [{:scale \"x\", :type \"x\"} {:scale \"y\", :type \"y\"}], :data ({:name \"c95a83bb-c179-4bef-8c9c-df0972944017\", :values ({:x 253, :y 538} {:x 415, :y 353} {:x 614, :y 144} {:x 467, :y 14} {:x 452, :y 20} {:x 61, :y 137} {:x 253, :y 538})} {:name \"70b05175-3194-4778-9842-e8a6bec7d869\", :values ({:x 253, :y 538} {:x 415, :y 353} {:x 614, :y 144} {:x 467, :y 14} {:x 452, :y 20} {:x 61, :y 137} {:x 253, :y 538})}), :marks ({:type \"line\", :from {:data \"c95a83bb-c179-4bef-8c9c-df0972944017\"}, :properties {:enter {:x {:scale \"x\", :field \"data.x\"}, :y {:scale \"y\", :field \"data.y\"}, :stroke {:value \"#FF29D2\"}, :strokeWidth {:value 2}, :strokeOpacity {:value 1}}}} {:type \"symbol\", :from {:data \"70b05175-3194-4778-9842-e8a6bec7d869\"}, :properties {:enter {:x {:scale \"x\", :field \"data.x\"}, :y {:scale \"y\", :field \"data.y\"}, :fill {:value \"steelblue\"}, :fillOpacity {:value 1}}, :update {:shape \"circle\", :size {:value 70}, :stroke {:value \"transparent\"}}, :hover {:size {:value 210}, :stroke {:value \"white\"}}}})}} nil]"}
 ;; <=
 
 ;; **
-;;; ## All Non-Redundant Tours Algorithm (improved `alltours-tsp`)
+;;; ### All Non-Redundant Tours Algorithm (improved `alltours-tsp`)
 ;;; We said there are n! tours of n cities, and thus 6 tours of 3 cities:
 ;; **
 
@@ -222,10 +239,6 @@
 ;; @@
 
 ;; **
-;;; ## Complexity of `alltours-tsp`
-;;; 
+;;; ### Complexity of `alltours-tsp`
+;;;
 ;; **
-
-;; @@
-
-;; @@
