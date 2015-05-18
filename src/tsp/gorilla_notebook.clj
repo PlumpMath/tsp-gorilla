@@ -279,13 +279,13 @@
 ;; **
 
 ;; @@
-(defn alltours-imp-tsp                   ; Redefine with new alltours
+(defn alltours-imp-tsp
   "Generate all possible tours of the cities and choose shortest tour."
   [cities]
   (shortest-tour (non-redundant-alltours cities)))
 
 (let [cities (gen-cities 7)]
-  [(plot-tsp alltours-tsp cities)      ; Time with old alltours
+  [(plot-tsp alltours-tsp cities)       ; Time with old alltours
    (plot-tsp alltours-imp-tsp cities)]) ; New time
 ;; @@
 ;; ->
