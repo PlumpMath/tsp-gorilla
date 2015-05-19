@@ -2,23 +2,23 @@
 
 ;; **
 ;;; # The Travelling Salesperson Problem in Clojure
-;;; 
+;;;
 ;;; This is a translation of Peter Norvig's greatly informative ipython [notebook](http://nbviewer.ipython.org/url/norvig.com/ipython/TSPv3.ipynb) to Clojure.
-;;; 
+;;;
 ;;; Consider the [Travelling Salesperson Problem](http://en.wikipedia.org/wiki/Traveling_salesman_problem):
 ;;; > Given a set of cities and the distances between each pair of cities, what is the shortest possible tour that visits each city exactly once, and returns to the starting city?
 ;;; In this notebook we will develop some solutions to the problem, and more generally show *how to think about solving a problem* like this.
-;;; 
-;;; 
+;;;
+;;;
 ;;; <a href="url"><img src="http://www.math.uwaterloo.ca/tsp/history/img/dantzig_big.jpg" align="left" height="270"></a>
-;;; 
+;;;
 ;;; <br>(An example tour.)
 ;; **
 
 ;; **
 ;;; ###Understanding What We're Talking About (Vocabulary)
 ;;; Do we understand precisely what the problem is asking? Do we understand all the concepts that the problem talks about?  Do we understand them well enough to implement them in a programming language? Let's take a first pass:
-;;; 
+;;;
 ;;; - **A set of cities**: We will need to represent a set of cities; Clojure's built in `vector` datatype is appropriate.
 ;;; - **Distance between each pair of cities**: If `a` and `b` are cities, this could be a function, `(distance [a b])`.  The resulting distance will be a real number.
 ;;; - **City**: All we have to know about an individual city is how far it is from other cities. We don't have to know its name, population, best restaurants, or anything else. So a city could be pair of (x, y) coordinates, if we are using straight-line distance on a plane.
@@ -26,9 +26,9 @@
 ;;; - **Shortest possible tour**: The shortest tour is the one whose tour length is the minimum of all tours.
 ;;; - **Tour length**: The sum of the distances between adjacent cities in the tour (including the last city to the first city). Probably  a function, `(tour-length tour)`.
 ;;; - **What is ...**: We can define a function to answer the question *what is the shortest possible tour?*  The function takes a set of cities as input and returns a tour as output. I will use the convention that any such function will have a name ending in the letters "`tsp`", the traditional abbreviation for Traveling Salesperson Problem.
-;;; 
+;;;
 ;;; At this stage I have a rough sketch of how to attack the problem.  I don't have all the answers, and I haven't committed to specific representations for all the concepts, but I know what all the pieces are, and I don't see anything that stops me from proceeding."
-;;; 
+;;;
 ;; **
 
 ;; **
@@ -39,9 +39,9 @@
 ;;; ### All Tours Algorithm `alltours-tsp`
 ;;; Let's start with a guaranteed correct (but inefficient) algorithm.
 ;;; > _All Tours Algorithm_: Generate all possible tours of the cities, and choose the shortest tour.
-;;; 
+;;;
 ;;; In general our design philosophy is to first write an English description of the algorithm, then write Clojure code that closely mirrors the English description. This will probably require some auxilliary functions and data structures; just assume they exist; devlare them in a forward declaration, and eventually define them with the same design philosophy.
-;;; 
+;;;
 ;;; Here is the start of the implementation. We declare the functions we will need in the future, and we can refer to them in higher level functions without defining them ahead of time. This serves as a kind of TODO list for implementing later.
 ;; **
 
@@ -56,8 +56,9 @@
 ;; <=
 
 ;; @@
-(declare alltours      ; Declared because alltours-tsp refers to it
-         tour-length)  ; Same as above--we will implement them later
+(declare alltours                       ; to be implemented later
+         shortest-tour
+         tour-length)
 
 (defn alltours-tsp
   "Generate all possible tours of the cities and choose shortest tour."
@@ -76,7 +77,7 @@
 ;; **
 ;;; ### Representing Tours
 ;;; A tour starts in one city, and then visits each of the other cities in order, before returning to the start city. A natural representation of a tour is a sequence of cities. For example [1 2 3] could represent a tour that starts in city 1, moves to 2, then 3, and finally returns to 1.
-;;; 
+;;;
 ;;; **Note**: Peter explains that he considered using [1 2 3 1] as the representation of this tour, as well as an ordered list of edges between cities: [[1 2] [2 3] [3 1]], but decided that [1 2 3] was simplest.
 ;; **
 
@@ -114,7 +115,7 @@
   [tour]
   (let [destinations (lazy-cat (drop 1 tour) (take 1 tour))
         city-pairs (map vector tour destinations)]
-    (apply + (map distance city-pairs))))
+    (apply + (map (partial apply distance) city-pairs))))
 ;; @@
 ;; =>
 ;;; {"type":"html","content":"<span class='clj-var'>#&#x27;tsp.core/tour-length</span>","value":"#'tsp.core/tour-length"}
@@ -126,21 +127,14 @@
 
 ;; **
 ;;; ### Representing Cities
-;;; 
+;;; We determined that the only thing that matters about cities is the distance between them. But before we can decide about how to represent cities, and before we can define `(distance a b)`,  we have to make a choice. In the fully general version of the TSP, the \"distance\" between two cities could be anything: it could factor in the amount of time it takes to travel between cities, the twistiness of the road, or anything else. The `(distance a b)` might be different from `(distance b a)`. So the distances could be represented by a matrix `distance[A][B]`, where any entry in the matrix could be any (non-negative) numeric value.
+;;;
+;;; But we will ignore the fully general TSP and concentrate on an important special case, the **Euclidean TSP**, where the distance between any two cities is the [Euclidean distance](http://en.wikipedia.org/wiki/Euclidean_distance), the straight-line distance between points in a two-dimensional plane. So a city can be represented by a two-dimensional point: a pair of *x* and *y* coordinates. We will use the record `City`, so that `(City. 300 0)` creates a city with x-coordinate of 300 and y coordinate of 0.  Then `(distance a b)` will be a function that uses the *x* and *y* coordinates to compute the distance between `a` and `b`.
+;;;
+;;; ### Representing Points and Computing `distance`
+;;; Ok, so a city can be represented as just a two-dimensional point. But how will we represent points? We will be defining a class `City` with the `defrecord` function. This class will have two fields, labeled `:x` and `:y`. They can then be accessed by `(:x some-city)` or `(:y some-city)`.
+;;;
 ;; **
-
-;; @@
-(defn distance
-  "Distance between two cities given as a city pair."
-  [[a b]]
-  (let [x-dist (- (:x a) (:x b))
-        y-dist (- (:y a) (:y b))]
-    (math/sqrt (+ (math/expt x-dist 2)
-                  (math/expt y-dist 2)))))
-;; @@
-;; =>
-;;; {"type":"html","content":"<span class='clj-var'>#&#x27;tsp.core/distance</span>","value":"#'tsp.core/distance"}
-;; <=
 
 ;; @@
 (defrecord City [x y])
@@ -148,10 +142,32 @@
 (defn gen-cities [n & {:keys [w h s] :or {w 900 h 600 s 42}}]
   (for [i (range n)]
     (City. (rand-int w) (rand-int h))))
+
+(defn distance
+  "Distance between two cities given as a city pair."
+  [a b]
+  (let [x-dist (- (:x a) (:x b))
+        y-dist (- (:y a) (:y b))]
+    (math/sqrt (+ (math/expt x-dist 2)
+                  (math/expt y-dist 2)))))
 ;; @@
 ;; =>
 ;;; {"type":"html","content":"<span class='clj-var'>#&#x27;tsp.core/gen-cities</span>","value":"#'tsp.core/gen-cities"}
 ;; <=
+
+;; **
+;;; Here is an example of computing the distance between two cities:
+;; **
+
+;; @@
+(let [a (City. 3 0)
+      b (City. 0 4)]
+  (distance a b))
+;; @@
+
+;; **
+;;; ### Random Sets of Cities
+;; **
 
 ;; @@
 (alltours [1 2 3])
@@ -221,7 +237,7 @@
 ;; ->
 ;;; &quot;Elapsed time: 352.173652 msecs&quot;
 ;;; 6 city tour with length 1947.8056323291223 for tsp.core$alltours_tsp@6eef14a8
-;;; 
+;;;
 ;; <-
 ;; =>
 ;;; {"type":"list-like","open":"<span class='clj-vector'>[</span>","close":"<span class='clj-vector'>]</span>","separator":" ","items":[{"type":"vega","content":{"width":400,"height":247.2187957763672,"padding":{"bottom":20,"top":10,"right":10,"left":50},"scales":[{"name":"x","type":"linear","range":"width","zero":false,"domain":{"data":"ee346748-e3b2-4060-a391-874619226232","field":"data.x"}},{"name":"y","type":"linear","range":"height","nice":true,"zero":false,"domain":{"data":"ee346748-e3b2-4060-a391-874619226232","field":"data.y"}}],"axes":[{"scale":"x","type":"x"},{"scale":"y","type":"y"}],"data":[{"name":"ee346748-e3b2-4060-a391-874619226232","values":[{"x":768,"y":562},{"x":329,"y":572},{"x":102,"y":4},{"x":265,"y":184},{"x":385,"y":191},{"x":588,"y":368},{"x":768,"y":562}]},{"name":"550ea90f-fc7a-4f03-b16a-68b549ffe4a8","values":[{"x":768,"y":562},{"x":329,"y":572},{"x":102,"y":4},{"x":265,"y":184},{"x":385,"y":191},{"x":588,"y":368},{"x":768,"y":562}]}],"marks":[{"type":"line","from":{"data":"ee346748-e3b2-4060-a391-874619226232"},"properties":{"enter":{"x":{"scale":"x","field":"data.x"},"y":{"scale":"y","field":"data.y"},"stroke":{"value":"#FF29D2"},"strokeWidth":{"value":2},"strokeOpacity":{"value":1}}}},{"type":"symbol","from":{"data":"550ea90f-fc7a-4f03-b16a-68b549ffe4a8"},"properties":{"enter":{"x":{"scale":"x","field":"data.x"},"y":{"scale":"y","field":"data.y"},"fill":{"value":"steelblue"},"fillOpacity":{"value":1}},"update":{"shape":"circle","size":{"value":70},"stroke":{"value":"transparent"}},"hover":{"size":{"value":210},"stroke":{"value":"white"}}}}]},"value":"#gorilla_repl.vega.VegaView{:content {:width 400, :height 247.2188, :padding {:bottom 20, :top 10, :right 10, :left 50}, :scales [{:name \"x\", :type \"linear\", :range \"width\", :zero false, :domain {:data \"ee346748-e3b2-4060-a391-874619226232\", :field \"data.x\"}} {:name \"y\", :type \"linear\", :range \"height\", :nice true, :zero false, :domain {:data \"ee346748-e3b2-4060-a391-874619226232\", :field \"data.y\"}}], :axes [{:scale \"x\", :type \"x\"} {:scale \"y\", :type \"y\"}], :data ({:name \"ee346748-e3b2-4060-a391-874619226232\", :values ({:x 768, :y 562} {:x 329, :y 572} {:x 102, :y 4} {:x 265, :y 184} {:x 385, :y 191} {:x 588, :y 368} {:x 768, :y 562})} {:name \"550ea90f-fc7a-4f03-b16a-68b549ffe4a8\", :values ({:x 768, :y 562} {:x 329, :y 572} {:x 102, :y 4} {:x 265, :y 184} {:x 385, :y 191} {:x 588, :y 368} {:x 768, :y 562})}), :marks ({:type \"line\", :from {:data \"ee346748-e3b2-4060-a391-874619226232\"}, :properties {:enter {:x {:scale \"x\", :field \"data.x\"}, :y {:scale \"y\", :field \"data.y\"}, :stroke {:value \"#FF29D2\"}, :strokeWidth {:value 2}, :strokeOpacity {:value 1}}}} {:type \"symbol\", :from {:data \"550ea90f-fc7a-4f03-b16a-68b549ffe4a8\"}, :properties {:enter {:x {:scale \"x\", :field \"data.x\"}, :y {:scale \"y\", :field \"data.y\"}, :fill {:value \"steelblue\"}, :fillOpacity {:value 1}}, :update {:shape \"circle\", :size {:value 70}, :stroke {:value \"transparent\"}}, :hover {:size {:value 210}, :stroke {:value \"white\"}}}})}}"},{"type":"html","content":"<span class='clj-nil'>nil</span>","value":"nil"}],"value":"[#gorilla_repl.vega.VegaView{:content {:width 400, :height 247.2188, :padding {:bottom 20, :top 10, :right 10, :left 50}, :scales [{:name \"x\", :type \"linear\", :range \"width\", :zero false, :domain {:data \"ee346748-e3b2-4060-a391-874619226232\", :field \"data.x\"}} {:name \"y\", :type \"linear\", :range \"height\", :nice true, :zero false, :domain {:data \"ee346748-e3b2-4060-a391-874619226232\", :field \"data.y\"}}], :axes [{:scale \"x\", :type \"x\"} {:scale \"y\", :type \"y\"}], :data ({:name \"ee346748-e3b2-4060-a391-874619226232\", :values ({:x 768, :y 562} {:x 329, :y 572} {:x 102, :y 4} {:x 265, :y 184} {:x 385, :y 191} {:x 588, :y 368} {:x 768, :y 562})} {:name \"550ea90f-fc7a-4f03-b16a-68b549ffe4a8\", :values ({:x 768, :y 562} {:x 329, :y 572} {:x 102, :y 4} {:x 265, :y 184} {:x 385, :y 191} {:x 588, :y 368} {:x 768, :y 562})}), :marks ({:type \"line\", :from {:data \"ee346748-e3b2-4060-a391-874619226232\"}, :properties {:enter {:x {:scale \"x\", :field \"data.x\"}, :y {:scale \"y\", :field \"data.y\"}, :stroke {:value \"#FF29D2\"}, :strokeWidth {:value 2}, :strokeOpacity {:value 1}}}} {:type \"symbol\", :from {:data \"550ea90f-fc7a-4f03-b16a-68b549ffe4a8\"}, :properties {:enter {:x {:scale \"x\", :field \"data.x\"}, :y {:scale \"y\", :field \"data.y\"}, :fill {:value \"steelblue\"}, :fillOpacity {:value 1}}, :update {:shape \"circle\", :size {:value 70}, :stroke {:value \"transparent\"}}, :hover {:size {:value 210}, :stroke {:value \"white\"}}}})}} nil]"}
@@ -274,7 +290,7 @@
 
 ;; **
 ;;; **Note:** We could say that there is only one tour of three cities, because [1, 2, 3] and [1, 3, 2] are in some sense the same tour, one going clockwise and the other counterclockwise. However, I choose not to do that, for two reasons. First, it would mean we can never handle maps where the distance from A to B is different from B to A. Second, it would complicate the code (if only by a line or two) while not saving much run time.
-;;; 
+;;;
 ;;; We can verify that calling alltours-imp-tsp works and gives the same tour with the same total distance. But it now runs faster:
 ;; **
 
@@ -293,7 +309,7 @@
 ;;; 7 city tour with length 1959.22756687452 for tsp.core$alltours_tsp@6eef14a8
 ;;; &quot;Elapsed time: 132.35775 msecs&quot;
 ;;; 7 city tour with length 1959.22756687452 for tsp.core$alltours_imp_tsp@2aeba060
-;;; 
+;;;
 ;; <-
 ;; =>
 ;;; {"type":"list-like","open":"<span class='clj-vector'>[</span>","close":"<span class='clj-vector'>]</span>","separator":" ","items":[{"type":"list-like","open":"<span class='clj-vector'>[</span>","close":"<span class='clj-vector'>]</span>","separator":" ","items":[{"type":"vega","content":{"width":400,"height":247.2187957763672,"padding":{"bottom":20,"top":10,"right":10,"left":50},"scales":[{"name":"x","type":"linear","range":"width","zero":false,"domain":{"data":"d47d29d0-97d0-49f5-b2e2-25ae980d2260","field":"data.x"}},{"name":"y","type":"linear","range":"height","nice":true,"zero":false,"domain":{"data":"d47d29d0-97d0-49f5-b2e2-25ae980d2260","field":"data.y"}}],"axes":[{"scale":"x","type":"x"},{"scale":"y","type":"y"}],"data":[{"name":"d47d29d0-97d0-49f5-b2e2-25ae980d2260","values":[{"x":472,"y":165},{"x":582,"y":2},{"x":762,"y":102},{"x":625,"y":247},{"x":421,"y":475},{"x":42,"y":407},{"x":37,"y":176},{"x":472,"y":165}]},{"name":"e9d7f880-9510-43fa-83aa-de5c2b02c9e9","values":[{"x":472,"y":165},{"x":582,"y":2},{"x":762,"y":102},{"x":625,"y":247},{"x":421,"y":475},{"x":42,"y":407},{"x":37,"y":176},{"x":472,"y":165}]}],"marks":[{"type":"line","from":{"data":"d47d29d0-97d0-49f5-b2e2-25ae980d2260"},"properties":{"enter":{"x":{"scale":"x","field":"data.x"},"y":{"scale":"y","field":"data.y"},"stroke":{"value":"#FF29D2"},"strokeWidth":{"value":2},"strokeOpacity":{"value":1}}}},{"type":"symbol","from":{"data":"e9d7f880-9510-43fa-83aa-de5c2b02c9e9"},"properties":{"enter":{"x":{"scale":"x","field":"data.x"},"y":{"scale":"y","field":"data.y"},"fill":{"value":"steelblue"},"fillOpacity":{"value":1}},"update":{"shape":"circle","size":{"value":70},"stroke":{"value":"transparent"}},"hover":{"size":{"value":210},"stroke":{"value":"white"}}}}]},"value":"#gorilla_repl.vega.VegaView{:content {:width 400, :height 247.2188, :padding {:bottom 20, :top 10, :right 10, :left 50}, :scales [{:name \"x\", :type \"linear\", :range \"width\", :zero false, :domain {:data \"d47d29d0-97d0-49f5-b2e2-25ae980d2260\", :field \"data.x\"}} {:name \"y\", :type \"linear\", :range \"height\", :nice true, :zero false, :domain {:data \"d47d29d0-97d0-49f5-b2e2-25ae980d2260\", :field \"data.y\"}}], :axes [{:scale \"x\", :type \"x\"} {:scale \"y\", :type \"y\"}], :data ({:name \"d47d29d0-97d0-49f5-b2e2-25ae980d2260\", :values ({:x 472, :y 165} {:x 582, :y 2} {:x 762, :y 102} {:x 625, :y 247} {:x 421, :y 475} {:x 42, :y 407} {:x 37, :y 176} {:x 472, :y 165})} {:name \"e9d7f880-9510-43fa-83aa-de5c2b02c9e9\", :values ({:x 472, :y 165} {:x 582, :y 2} {:x 762, :y 102} {:x 625, :y 247} {:x 421, :y 475} {:x 42, :y 407} {:x 37, :y 176} {:x 472, :y 165})}), :marks ({:type \"line\", :from {:data \"d47d29d0-97d0-49f5-b2e2-25ae980d2260\"}, :properties {:enter {:x {:scale \"x\", :field \"data.x\"}, :y {:scale \"y\", :field \"data.y\"}, :stroke {:value \"#FF29D2\"}, :strokeWidth {:value 2}, :strokeOpacity {:value 1}}}} {:type \"symbol\", :from {:data \"e9d7f880-9510-43fa-83aa-de5c2b02c9e9\"}, :properties {:enter {:x {:scale \"x\", :field \"data.x\"}, :y {:scale \"y\", :field \"data.y\"}, :fill {:value \"steelblue\"}, :fillOpacity {:value 1}}, :update {:shape \"circle\", :size {:value 70}, :stroke {:value \"transparent\"}}, :hover {:size {:value 210}, :stroke {:value \"white\"}}}})}}"},{"type":"html","content":"<span class='clj-nil'>nil</span>","value":"nil"}],"value":"[#gorilla_repl.vega.VegaView{:content {:width 400, :height 247.2188, :padding {:bottom 20, :top 10, :right 10, :left 50}, :scales [{:name \"x\", :type \"linear\", :range \"width\", :zero false, :domain {:data \"d47d29d0-97d0-49f5-b2e2-25ae980d2260\", :field \"data.x\"}} {:name \"y\", :type \"linear\", :range \"height\", :nice true, :zero false, :domain {:data \"d47d29d0-97d0-49f5-b2e2-25ae980d2260\", :field \"data.y\"}}], :axes [{:scale \"x\", :type \"x\"} {:scale \"y\", :type \"y\"}], :data ({:name \"d47d29d0-97d0-49f5-b2e2-25ae980d2260\", :values ({:x 472, :y 165} {:x 582, :y 2} {:x 762, :y 102} {:x 625, :y 247} {:x 421, :y 475} {:x 42, :y 407} {:x 37, :y 176} {:x 472, :y 165})} {:name \"e9d7f880-9510-43fa-83aa-de5c2b02c9e9\", :values ({:x 472, :y 165} {:x 582, :y 2} {:x 762, :y 102} {:x 625, :y 247} {:x 421, :y 475} {:x 42, :y 407} {:x 37, :y 176} {:x 472, :y 165})}), :marks ({:type \"line\", :from {:data \"d47d29d0-97d0-49f5-b2e2-25ae980d2260\"}, :properties {:enter {:x {:scale \"x\", :field \"data.x\"}, :y {:scale \"y\", :field \"data.y\"}, :stroke {:value \"#FF29D2\"}, :strokeWidth {:value 2}, :strokeOpacity {:value 1}}}} {:type \"symbol\", :from {:data \"e9d7f880-9510-43fa-83aa-de5c2b02c9e9\"}, :properties {:enter {:x {:scale \"x\", :field \"data.x\"}, :y {:scale \"y\", :field \"data.y\"}, :fill {:value \"steelblue\"}, :fillOpacity {:value 1}}, :update {:shape \"circle\", :size {:value 70}, :stroke {:value \"transparent\"}}, :hover {:size {:value 210}, :stroke {:value \"white\"}}}})}} nil]"},{"type":"list-like","open":"<span class='clj-vector'>[</span>","close":"<span class='clj-vector'>]</span>","separator":" ","items":[{"type":"vega","content":{"width":400,"height":247.2187957763672,"padding":{"bottom":20,"top":10,"right":10,"left":50},"scales":[{"name":"x","type":"linear","range":"width","zero":false,"domain":{"data":"dcc114ec-e526-4e19-b6f1-45137b95e7bc","field":"data.x"}},{"name":"y","type":"linear","range":"height","nice":true,"zero":false,"domain":{"data":"dcc114ec-e526-4e19-b6f1-45137b95e7bc","field":"data.y"}}],"axes":[{"scale":"x","type":"x"},{"scale":"y","type":"y"}],"data":[{"name":"dcc114ec-e526-4e19-b6f1-45137b95e7bc","values":[{"x":472,"y":165},{"x":582,"y":2},{"x":762,"y":102},{"x":625,"y":247},{"x":421,"y":475},{"x":42,"y":407},{"x":37,"y":176},{"x":472,"y":165}]},{"name":"779f53da-9c6b-4289-8c92-3f66c58a9730","values":[{"x":472,"y":165},{"x":582,"y":2},{"x":762,"y":102},{"x":625,"y":247},{"x":421,"y":475},{"x":42,"y":407},{"x":37,"y":176},{"x":472,"y":165}]}],"marks":[{"type":"line","from":{"data":"dcc114ec-e526-4e19-b6f1-45137b95e7bc"},"properties":{"enter":{"x":{"scale":"x","field":"data.x"},"y":{"scale":"y","field":"data.y"},"stroke":{"value":"#FF29D2"},"strokeWidth":{"value":2},"strokeOpacity":{"value":1}}}},{"type":"symbol","from":{"data":"779f53da-9c6b-4289-8c92-3f66c58a9730"},"properties":{"enter":{"x":{"scale":"x","field":"data.x"},"y":{"scale":"y","field":"data.y"},"fill":{"value":"steelblue"},"fillOpacity":{"value":1}},"update":{"shape":"circle","size":{"value":70},"stroke":{"value":"transparent"}},"hover":{"size":{"value":210},"stroke":{"value":"white"}}}}]},"value":"#gorilla_repl.vega.VegaView{:content {:width 400, :height 247.2188, :padding {:bottom 20, :top 10, :right 10, :left 50}, :scales [{:name \"x\", :type \"linear\", :range \"width\", :zero false, :domain {:data \"dcc114ec-e526-4e19-b6f1-45137b95e7bc\", :field \"data.x\"}} {:name \"y\", :type \"linear\", :range \"height\", :nice true, :zero false, :domain {:data \"dcc114ec-e526-4e19-b6f1-45137b95e7bc\", :field \"data.y\"}}], :axes [{:scale \"x\", :type \"x\"} {:scale \"y\", :type \"y\"}], :data ({:name \"dcc114ec-e526-4e19-b6f1-45137b95e7bc\", :values ({:x 472, :y 165} {:x 582, :y 2} {:x 762, :y 102} {:x 625, :y 247} {:x 421, :y 475} {:x 42, :y 407} {:x 37, :y 176} {:x 472, :y 165})} {:name \"779f53da-9c6b-4289-8c92-3f66c58a9730\", :values ({:x 472, :y 165} {:x 582, :y 2} {:x 762, :y 102} {:x 625, :y 247} {:x 421, :y 475} {:x 42, :y 407} {:x 37, :y 176} {:x 472, :y 165})}), :marks ({:type \"line\", :from {:data \"dcc114ec-e526-4e19-b6f1-45137b95e7bc\"}, :properties {:enter {:x {:scale \"x\", :field \"data.x\"}, :y {:scale \"y\", :field \"data.y\"}, :stroke {:value \"#FF29D2\"}, :strokeWidth {:value 2}, :strokeOpacity {:value 1}}}} {:type \"symbol\", :from {:data \"779f53da-9c6b-4289-8c92-3f66c58a9730\"}, :properties {:enter {:x {:scale \"x\", :field \"data.x\"}, :y {:scale \"y\", :field \"data.y\"}, :fill {:value \"steelblue\"}, :fillOpacity {:value 1}}, :update {:shape \"circle\", :size {:value 70}, :stroke {:value \"transparent\"}}, :hover {:size {:value 210}, :stroke {:value \"white\"}}}})}}"},{"type":"html","content":"<span class='clj-nil'>nil</span>","value":"nil"}],"value":"[#gorilla_repl.vega.VegaView{:content {:width 400, :height 247.2188, :padding {:bottom 20, :top 10, :right 10, :left 50}, :scales [{:name \"x\", :type \"linear\", :range \"width\", :zero false, :domain {:data \"dcc114ec-e526-4e19-b6f1-45137b95e7bc\", :field \"data.x\"}} {:name \"y\", :type \"linear\", :range \"height\", :nice true, :zero false, :domain {:data \"dcc114ec-e526-4e19-b6f1-45137b95e7bc\", :field \"data.y\"}}], :axes [{:scale \"x\", :type \"x\"} {:scale \"y\", :type \"y\"}], :data ({:name \"dcc114ec-e526-4e19-b6f1-45137b95e7bc\", :values ({:x 472, :y 165} {:x 582, :y 2} {:x 762, :y 102} {:x 625, :y 247} {:x 421, :y 475} {:x 42, :y 407} {:x 37, :y 176} {:x 472, :y 165})} {:name \"779f53da-9c6b-4289-8c92-3f66c58a9730\", :values ({:x 472, :y 165} {:x 582, :y 2} {:x 762, :y 102} {:x 625, :y 247} {:x 421, :y 475} {:x 42, :y 407} {:x 37, :y 176} {:x 472, :y 165})}), :marks ({:type \"line\", :from {:data \"dcc114ec-e526-4e19-b6f1-45137b95e7bc\"}, :properties {:enter {:x {:scale \"x\", :field \"data.x\"}, :y {:scale \"y\", :field \"data.y\"}, :stroke {:value \"#FF29D2\"}, :strokeWidth {:value 2}, :strokeOpacity {:value 1}}}} {:type \"symbol\", :from {:data \"779f53da-9c6b-4289-8c92-3f66c58a9730\"}, :properties {:enter {:x {:scale \"x\", :field \"data.x\"}, :y {:scale \"y\", :field \"data.y\"}, :fill {:value \"steelblue\"}, :fillOpacity {:value 1}}, :update {:shape \"circle\", :size {:value 70}, :stroke {:value \"transparent\"}}, :hover {:size {:value 210}, :stroke {:value \"white\"}}}})}} nil]"}],"value":"[[#gorilla_repl.vega.VegaView{:content {:width 400, :height 247.2188, :padding {:bottom 20, :top 10, :right 10, :left 50}, :scales [{:name \"x\", :type \"linear\", :range \"width\", :zero false, :domain {:data \"d47d29d0-97d0-49f5-b2e2-25ae980d2260\", :field \"data.x\"}} {:name \"y\", :type \"linear\", :range \"height\", :nice true, :zero false, :domain {:data \"d47d29d0-97d0-49f5-b2e2-25ae980d2260\", :field \"data.y\"}}], :axes [{:scale \"x\", :type \"x\"} {:scale \"y\", :type \"y\"}], :data ({:name \"d47d29d0-97d0-49f5-b2e2-25ae980d2260\", :values ({:x 472, :y 165} {:x 582, :y 2} {:x 762, :y 102} {:x 625, :y 247} {:x 421, :y 475} {:x 42, :y 407} {:x 37, :y 176} {:x 472, :y 165})} {:name \"e9d7f880-9510-43fa-83aa-de5c2b02c9e9\", :values ({:x 472, :y 165} {:x 582, :y 2} {:x 762, :y 102} {:x 625, :y 247} {:x 421, :y 475} {:x 42, :y 407} {:x 37, :y 176} {:x 472, :y 165})}), :marks ({:type \"line\", :from {:data \"d47d29d0-97d0-49f5-b2e2-25ae980d2260\"}, :properties {:enter {:x {:scale \"x\", :field \"data.x\"}, :y {:scale \"y\", :field \"data.y\"}, :stroke {:value \"#FF29D2\"}, :strokeWidth {:value 2}, :strokeOpacity {:value 1}}}} {:type \"symbol\", :from {:data \"e9d7f880-9510-43fa-83aa-de5c2b02c9e9\"}, :properties {:enter {:x {:scale \"x\", :field \"data.x\"}, :y {:scale \"y\", :field \"data.y\"}, :fill {:value \"steelblue\"}, :fillOpacity {:value 1}}, :update {:shape \"circle\", :size {:value 70}, :stroke {:value \"transparent\"}}, :hover {:size {:value 210}, :stroke {:value \"white\"}}}})}} nil] [#gorilla_repl.vega.VegaView{:content {:width 400, :height 247.2188, :padding {:bottom 20, :top 10, :right 10, :left 50}, :scales [{:name \"x\", :type \"linear\", :range \"width\", :zero false, :domain {:data \"dcc114ec-e526-4e19-b6f1-45137b95e7bc\", :field \"data.x\"}} {:name \"y\", :type \"linear\", :range \"height\", :nice true, :zero false, :domain {:data \"dcc114ec-e526-4e19-b6f1-45137b95e7bc\", :field \"data.y\"}}], :axes [{:scale \"x\", :type \"x\"} {:scale \"y\", :type \"y\"}], :data ({:name \"dcc114ec-e526-4e19-b6f1-45137b95e7bc\", :values ({:x 472, :y 165} {:x 582, :y 2} {:x 762, :y 102} {:x 625, :y 247} {:x 421, :y 475} {:x 42, :y 407} {:x 37, :y 176} {:x 472, :y 165})} {:name \"779f53da-9c6b-4289-8c92-3f66c58a9730\", :values ({:x 472, :y 165} {:x 582, :y 2} {:x 762, :y 102} {:x 625, :y 247} {:x 421, :y 475} {:x 42, :y 407} {:x 37, :y 176} {:x 472, :y 165})}), :marks ({:type \"line\", :from {:data \"dcc114ec-e526-4e19-b6f1-45137b95e7bc\"}, :properties {:enter {:x {:scale \"x\", :field \"data.x\"}, :y {:scale \"y\", :field \"data.y\"}, :stroke {:value \"#FF29D2\"}, :strokeWidth {:value 2}, :strokeOpacity {:value 1}}}} {:type \"symbol\", :from {:data \"779f53da-9c6b-4289-8c92-3f66c58a9730\"}, :properties {:enter {:x {:scale \"x\", :field \"data.x\"}, :y {:scale \"y\", :field \"data.y\"}, :fill {:value \"steelblue\"}, :fillOpacity {:value 1}}, :update {:shape \"circle\", :size {:value 70}, :stroke {:value \"transparent\"}}, :hover {:size {:value 210}, :stroke {:value \"white\"}}}})}} nil]]"}
@@ -301,5 +317,5 @@
 
 ;; **
 ;;; ### Complexity of `alltours-tsp`
-;;; 
+;;;
 ;; **
